@@ -3,7 +3,8 @@
 const fs = require('fs')
 const path = require('path')
 const argv = require('minimist')(process.argv.slice(2), {
-  string: ['others', 'ignore'],
+  string: ['others', 'ignore', 'ignoreVersion', 'skip'],
+  boolean: ['fix']
 })
 
 const rootPkgPath = path.join(process.cwd(), '/package.json')
@@ -30,6 +31,10 @@ const skip =
   (argv.skip || process.env.YARN_SYNC_SKIP) &&
   new RegExp(argv.skip || process.env.YARN_SYNC_SKIP)
 
+const ignoreVersion =
+    (argv.ignoreVersion || process.env.YARN_SYNC_IGNORE_VERSION) &&
+    new RegExp(argv.ignoreVersion || process.env.YARN_SYNC_IGNORE_VERSION)
+
 const fix = !!(argv.fix || process.env.YARN_SYNC_FIX)
 
 let rootChanged = false
@@ -37,15 +42,16 @@ let rootChanged = false
 const updateDependencies = (name, deps, ignoredList, isDev) => {
   if (!deps) return
   Object.keys(deps).forEach(d => {
-    const version = findDependencies(d)
+    let version = findDependencies(d)
     if (ignoredList.indexOf(d) >= 0) return
     if (!version) {
-      if (ignore && ignore.test(d)) return
+      version = deps[d]
+      if (ignore && ignore.test(d) || ignoreVersion && ignoreVersion.test(version)) return
       if (fix) {
         if (isDev) {
-          rootDevDeps[d] = deps[d]
+          rootDevDeps[d] = version
         } else {
-          rootDeps[d] = deps[d]
+          rootDeps[d] = version
         }
         ignoredList.push(d)
         rootChanged = true
@@ -58,6 +64,7 @@ const updateDependencies = (name, deps, ignoredList, isDev) => {
       return
     }
     const mayOldVersion = deps[d]
+    if (ignoreVersion && ignoreVersion.test(mayOldVersion)) return
     if (version !== mayOldVersion) {
       log(name, `Sync dependency \`${d}\`: ${mayOldVersion} -> ${version}`)
       deps[d] = version
